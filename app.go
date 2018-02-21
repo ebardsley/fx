@@ -92,6 +92,37 @@ func (po provideOption) String() string {
 	return fmt.Sprintf("fx.Provide(%s)", strings.Join(items, ", "))
 }
 
+// Remove takes a list of options and removes all functions that they provide from the application.
+func Remove(opts ...Option) Option {
+	// Build a list of depends in a fake app. Throw the list into a map, because comparing functions,
+	// especially copies of function pointers, is hard without pulling reflect into this package.
+	//
+	// Using strings is less than idea, especially for anonymous functions.
+	//
+	// XXX: before committing, either add type safety to prevent removing those, or properly identify
+	// them.
+	removeNames := map[string]bool{}
+	{
+		remove := &App{}
+		for _, o := range opts {
+			o.apply(remove)
+		}
+		for _, c := range remove.provides {
+			removeNames[fxreflect.FuncName(c)] = true
+		}
+	}
+
+	return optionFunc(func(app *App) {
+		for i, c := range app.provides {
+			if removeNames[fxreflect.FuncName(c)] {
+				// Safer than resizing or recreating the list. Open to suggestions for a better way to do
+				// this.
+				app.provides[i] = nil
+			}
+		}
+	})
+}
+
 // Invoke registers functions that are executed eagerly on application start.
 // Arguments for these invocations are built using the constructors registered
 // by Provide. Passing multiple Invoke options appends the new invocations to
@@ -264,7 +295,9 @@ func New(opts ...Option) *App {
 	}
 
 	for _, p := range app.provides {
-		app.provide(p)
+		if p != nil {
+			app.provide(p)
+		}
 	}
 	app.provide(func() Lifecycle { return app.lifecycle })
 

@@ -96,6 +96,52 @@ func TestInvokes(t *testing.T) {
 	})
 }
 
+type testableInt int
+
+func newTestableInt(v int) func() testableInt {
+	return func() testableInt {
+		return testableInt(v)
+	}
+}
+func TestRemoves(t *testing.T) {
+	t.Run("Baseline", func(t *testing.T) {
+		app := fxtest.New(t,
+			Provide(newTestableInt(10)),
+			Invoke(func(a testableInt) {
+				assert.Equal(t, 10, int(a))
+			}),
+		)
+		require.NoError(t, app.Err())
+	})
+
+	t.Run("RemoveWorks", func(t *testing.T) {
+		module := Provide(newTestableInt(10))
+		app := fxtest.New(t,
+			module,
+			Remove(module),
+			Invoke(func(a testableInt) {
+				assert.Equal(t, 10, int(a))
+			}),
+		)
+		err := app.Err()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "testableInt isn't in the container")
+	})
+
+	t.Run("ReplacementWorks", func(t *testing.T) {
+		module := Provide(newTestableInt(10))
+		app := fxtest.New(t,
+			module,
+			Remove(module),
+			Provide(newTestableInt(20)),
+			Invoke(func(a testableInt) {
+				assert.Equal(t, 20, int(a))
+			}),
+		)
+		assert.NoError(t, app.Err())
+	})
+}
+
 func TestOptions(t *testing.T) {
 	t.Run("OptionsComposition", func(t *testing.T) {
 		var n int
